@@ -133,7 +133,7 @@ func (s *Server) Start(host, port string) error {
 // StartContext is responsible for kicking off the http server,
 // and can be closed by cancelling the provided context
 func (s *Server) StartContext(ctx context.Context, host, port string) error {
-	s.Infof("Fingerprint %s", s.fingerprint)
+	s.Infof("Fingerprint  %s", s.fingerprint)
 	if s.users.Len() > 0 {
 		s.Infof("User authenication enabled")
 	}

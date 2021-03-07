@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -151,6 +152,7 @@ func (t *Tunnel) BindRemotes(ctx context.Context, remotes []*settings.Remote) er
 	}
 	proxies := make([]*Proxy, len(remotes))
 	for i, remote := range remotes {
+		fmt.Println("We are going to create new proxy")
 		p, err := NewProxy(t.Logger, t, t.proxyCount, remote)
 		if err != nil {
 			return err

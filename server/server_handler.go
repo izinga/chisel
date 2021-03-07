@@ -1,6 +1,7 @@
 package chserver
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -50,7 +51,7 @@ func (s *Server) handleClientHandler(w http.ResponseWriter, r *http.Request) {
 // handleWebsocket is responsible for handling the websocket connection
 func (s *Server) handleWebsocket(w http.ResponseWriter, req *http.Request) {
 	id := atomic.AddInt32(&s.sessCount, 1)
-	l := s.Fork("session#%d", id)
+	l := s.Fork("session changed#%d", id)
 	wsConn, err := upgrader.Upgrade(w, req, nil)
 	if err != nil {
 		l.Debugf("Failed to upgrade (%s)", err)
@@ -95,6 +96,7 @@ func (s *Server) handleWebsocket(w http.ResponseWriter, req *http.Request) {
 		failed(s.Errorf("expecting config request"))
 		return
 	}
+	fmt.Println("r.Payload ", string(r.Payload))
 	c, err := settings.DecodeConfig(r.Payload)
 	if err != nil {
 		failed(s.Errorf("invalid config"))

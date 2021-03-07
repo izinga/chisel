@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 
@@ -32,7 +33,7 @@ type Proxy struct {
 func NewProxy(logger *cio.Logger, sshTun sshTunnel, index int, remote *settings.Remote) (*Proxy, error) {
 	id := index + 1
 	p := &Proxy{
-		Logger: logger.Fork("proxy#%s", remote.String()),
+		Logger: logger.Fork("proxy changed #%s", remote.String()),
 		sshTun: sshTun,
 		id:     id,
 		remote: remote,
@@ -41,6 +42,7 @@ func NewProxy(logger *cio.Logger, sshTun sshTunnel, index int, remote *settings.
 }
 
 func (p *Proxy) listen() error {
+	fmt.Println("tcp", p.remote.LocalHost+":"+p.remote.LocalPort)
 	if p.remote.Stdio {
 		//TODO check if pipes active?
 	} else if p.remote.LocalProto == "tcp" {

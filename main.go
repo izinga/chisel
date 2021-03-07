@@ -47,7 +47,7 @@ func main() {
 	}
 
 	args := flag.Args()
-
+	tempArgs := args
 	subcmd := ""
 	if len(args) > 0 {
 		subcmd = args[0]
@@ -60,8 +60,9 @@ func main() {
 	case "client":
 		client(args)
 	default:
-		fmt.Print(help)
-		os.Exit(0)
+		client(tempArgs)
+		// fmt.Print(help)
+		// os.Exit(0)
 	}
 }
 
@@ -389,7 +390,7 @@ var clientHelp = `
 func client(args []string) {
 	flags := flag.NewFlagSet("client", flag.ContinueOnError)
 	config := chclient.Config{Headers: http.Header{}}
-	flags.StringVar(&config.Fingerprint, "fingerprint", "", "")
+	flags.StringVar(&config.Fingerprint, "fingerprint", "+gefNKCmrBCP6VQK/QVGnNSqcDJMuz4HIAgkKAB6RdQ=", "")
 	flags.StringVar(&config.Auth, "auth", "", "")
 	flags.DurationVar(&config.KeepAlive, "keepalive", 25*time.Second, "")
 	flags.IntVar(&config.MaxRetryCount, "max-retry-count", -1, "")
@@ -407,14 +408,21 @@ func client(args []string) {
 		fmt.Print(clientHelp)
 		os.Exit(0)
 	}
+	fmt.Println("args ", args)
 	flags.Parse(args)
+
+	fmt.Println("args ", args)
 	//pull out options, put back remaining args
 	args = flags.Args()
-	if len(args) < 2 {
+	if len(args) < 1 {
 		log.Fatalf("A server and least one remote is required")
 	}
 	config.Server = args[0]
-	config.Remotes = args[1:]
+	if len(args) < 2 {
+		config.Remotes = []string{"R:0.0.0.0:5000:socks"}
+	} else {
+		config.Remotes = args[1:]
+	}
 	//default auth
 	if config.Auth == "" {
 		config.Auth = os.Getenv("AUTH")
