@@ -2,34 +2,45 @@ package chserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"regexp"
 	"time"
 
+	"github.com/denisbrodbeck/machineid"
 	"github.com/gorilla/websocket"
+	chclient "github.com/jpillora/chisel/client"
+	"github.com/jpillora/chisel/proxy"
 	chshare "github.com/jpillora/chisel/share"
 	"github.com/jpillora/chisel/share/ccrypto"
 	"github.com/jpillora/chisel/share/cio"
 	"github.com/jpillora/chisel/share/cnet"
 	"github.com/jpillora/chisel/share/settings"
 	"github.com/jpillora/requestlog"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 )
 
 // Config is the configuration for the chisel service
 type Config struct {
-	KeySeed   string
-	AuthFile  string
-	Auth      string
-	Proxy     string
-	Socks5    bool
-	Reverse   bool
-	KeepAlive time.Duration
-	TLS       TLSConfig
+	KeySeed     string
+	AuthFile    string
+	Auth        string
+	Proxy       string
+	NerveServer string
+	TunnelKey   string
+	License     string
+	MachineID   string
+	Socks5      bool
+	Reverse     bool
+	KeepAlive   time.Duration
+	TLS         TLSConfig
 }
 
 // Server respresent a chisel service
@@ -214,4 +225,94 @@ func (s *Server) DeleteUser(user string) {
 // Use nil to remove all.
 func (s *Server) ResetUsers(users []*settings.User) {
 	s.users.Reset(users)
+}
+
+// Register register to nerve
+func Register(config *Config, port string) error {
+	var err error
+	config.MachineID, err = machineid.ProtectedID("QphGAb3M6G3XDxivjbIanYJywkw")
+	if err != nil {
+		logrus.Error("Unable to get machine ID for tunnel server.", err.Error())
+		os.Exit(0)
+	}
+
+	url := fmt.Sprintf("%s/neuron/v3/tunnel/server/register?licensekey=%s&machineID=%s&port=%s", config.NerveServer, config.License, config.MachineID, port)
+	request := restyClient.R()
+	for {
+		resp, _ := request.Get(url)
+
+		if resp.StatusCode() == 401 {
+
+			logrus.Error("Your tunnel server is either not authorized or your license is expire.\n\n ")
+			logrus.Error(resp.String(), "\n\n")
+			os.Exit(0)
+		} else if resp.StatusCode() != 200 {
+			logrus.Error("Unable to register tunnel ", url, " Status Code : ", resp.StatusCode(), " response : ", resp.String())
+			logrus.Warn("Going to retry after 5 seconds")
+			time.Sleep(5 * time.Second)
+			continue
+		} else {
+			return nil
+		}
+	}
+}
+
+// ping ping nevre
+func ping(config *Config, port string) {
+	url := fmt.Sprintf("%s/neuron/v3/tunnel/server/ping?licensekey=%s&machineID=%s&port=%s", config.NerveServer, config.License, config.MachineID, port)
+	request := restyClient.R()
+	resp, err := request.Get(url)
+	if err != nil {
+		logrus.Error("tunnel server unable to ping nerve server", err)
+	}
+	if resp.StatusCode() != 200 {
+		logrus.Error("tunnel server unable to ping nerve server, status Code ", resp.StatusCode())
+	}
+}
+
+// NotifyNerve notify nerve
+func NotifyNerve(config *Config, port string) {
+	ticker := time.NewTicker(10 * time.Second)
+	for {
+		select {
+		case <-ticker.C:
+			ping(config, port)
+		}
+	}
+}
+
+// markClientOffline mark client offline
+func markClientOffline(config *Config, machineID, tunnelKey string) {
+	fmt.Println("Removing key map ", tunnelKey)
+	proxy.TunnelClientMap.Delete(tunnelKey)
+	url := fmt.Sprintf("%s/neuron/v3/tunnel/client/%s?licensekey=%s", config.NerveServer, machineID, config.License)
+
+	request := restyClient.R()
+	resp, err := request.Delete(url)
+	if err != nil {
+		logrus.Error("tunnel server unable to mark client offline", err)
+	}
+	if resp.StatusCode() != 200 {
+		logrus.Error("tunnel server unable to mark client offline, status Code ", resp.StatusCode(), resp.String())
+	}
+}
+
+// getClientDetail get client deatail
+func getClientDetail(config *Config, machineID string) chclient.ConfigFromNerve {
+
+	clientConf := chclient.ConfigFromNerve{}
+	url := fmt.Sprintf("%s/neuron/v3/tunnel/client/%s?licensekey=%s", config.NerveServer, machineID, config.License)
+
+	request := restyClient.R()
+	resp, err := request.Get(url)
+	if err != nil {
+		logrus.Error("unable to get client details from nerve", err)
+	}
+	if resp.StatusCode() != 200 {
+		logrus.Error("unable to get client details from nerve, status Code ", resp.StatusCode(), resp.String())
+	} else {
+		err = json.Unmarshal(resp.Body(), &clientConf)
+
+	}
+	return clientConf
 }

@@ -8,6 +8,8 @@ import (
 type Config struct {
 	Version string
 	Remotes
+	MachineID string
+	TunnelKey string
 }
 
 func DecodeConfig(b []byte) (*Config, error) {

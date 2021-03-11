@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/go-resty/resty/v2"
+	"github.com/jpillora/chisel/proxy"
 	chshare "github.com/jpillora/chisel/share"
 	"github.com/jpillora/chisel/share/cnet"
 	"github.com/jpillora/chisel/share/settings"
@@ -14,6 +16,14 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/sync/errgroup"
 )
+
+var restyClient *resty.Client
+
+func init() {
+	restyClient = resty.New()
+	restyClient.SetHeader("Accept", "application/json")
+	restyClient.SetTimeout(5 * time.Second)
+}
 
 // handleClientHandler is the main http websocket handler for the chisel server
 func (s *Server) handleClientHandler(w http.ResponseWriter, r *http.Request) {
@@ -35,14 +45,30 @@ func (s *Server) handleClientHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	//no proxy defined, provide access to health/version checks
-	switch r.URL.String() {
+	switch r.URL.Path {
 	case "/health":
 		w.Write([]byte("OK\n"))
 		return
 	case "/version":
 		w.Write([]byte(chshare.BuildVersion))
 		return
+	case "/update":
+		tunnelKey := r.URL.Query().Get("key")
+		deviceIP := r.URL.Query().Get("deviceIP")
+		if temp, ok := proxy.TunnelClientMap.Load(tunnelKey); ok {
+			fmt.Println("TunnelClientMap found for key ", tunnelKey, " ", temp)
+			proxy.DeviceIPMap.Store(deviceIP, tunnelKey)
+		} else {
+			fmt.Println("No TunnelClientMap found for key ", tunnelKey)
+		}
+		w.Write([]byte(fmt.Sprintf("We ll update tunnel key '%s' and  device ip '%s' map", tunnelKey, deviceIP)))
+		return
+	case "/delete":
+		w.Write([]byte("We ll delete tunnel key, device ip and client map"))
+		return
+
 	}
+
 	//missing :O
 	w.WriteHeader(404)
 	w.Write([]byte("Not found"))
@@ -96,13 +122,12 @@ func (s *Server) handleWebsocket(w http.ResponseWriter, req *http.Request) {
 		failed(s.Errorf("expecting config request"))
 		return
 	}
-	fmt.Println("r.Payload ", string(r.Payload))
 	c, err := settings.DecodeConfig(r.Payload)
 	if err != nil {
 		failed(s.Errorf("invalid config"))
 		return
 	}
-	//print if client and server  versions dont match
+	fmt.Printf("r.Payload %+v\n", c)
 	if c.Version != chshare.BuildVersion {
 		v := c.Version
 		if v == "" {
@@ -159,10 +184,16 @@ func (s *Server) handleWebsocket(w http.ResponseWriter, req *http.Request) {
 		//block
 		return tunnel.BindRemotes(ctx, serverInbound)
 	})
+	clientConfig := getClientDetail(s.config, c.MachineID)
+
+	fmt.Println("We are going to create proxy map ", c.TunnelKey, fmt.Sprintf(" %s:%d", clientConfig.IP, clientConfig.Port))
+	proxy.TunnelClientMap.Store(c.TunnelKey, fmt.Sprintf("%d", clientConfig.Port))
 	err = eg.Wait()
 	if err != nil && !strings.HasSuffix(err.Error(), "EOF") {
 		l.Debugf("Closed connection (%s)", err)
 	} else {
 		l.Debugf("Closed connection")
 	}
+	l.Debugf("We are going to mark client offline '%s'", c.MachineID)
+	markClientOffline(s.config, c.MachineID, c.TunnelKey)
 }

@@ -6,16 +6,20 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/denisbrodbeck/machineid"
+	"github.com/go-resty/resty/v2"
 	"github.com/gorilla/websocket"
 	chshare "github.com/jpillora/chisel/share"
 	"github.com/jpillora/chisel/share/ccrypto"
@@ -23,6 +27,7 @@ import (
 	"github.com/jpillora/chisel/share/cnet"
 	"github.com/jpillora/chisel/share/settings"
 	"github.com/jpillora/chisel/share/tunnel"
+	"github.com/sirupsen/logrus"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/proxy"
@@ -38,10 +43,26 @@ type Config struct {
 	MaxRetryInterval time.Duration
 	Server           string
 	Proxy            string
+	NerveServer      string
+	AccessKey        string
+	MachineID        string
+	TunnelKey        string
 	Remotes          []string
 	Headers          http.Header
 	TLS              TLSConfig
 	DialContext      func(ctx context.Context, network, addr string) (net.Conn, error)
+}
+
+// ConfigFromNerve config from nerve
+type ConfigFromNerve struct {
+	Name          string `json:"name" bson:"name" validate:"required"`
+	Desc          string `json:"desc" bson:"desc"`
+	IP            string `json:"ip" bson:"ip" validate:"required"`
+	Port          int    `json:"port" bson:"port" validate:"required"`
+	MachineID     string `json:"machineID" bson:"machineID" validate:"required"`
+	ServerAddress string `json:"serverAddress" bson:"serverAddress"`
+	ServerID      string `json:"serverID" bson:"serverID" validate:"required"`
+	Key           string `json:"key" bson:"key" validate:"required"`
 }
 
 //TLSConfig for a Client
@@ -65,6 +86,14 @@ type Client struct {
 	stop      func()
 	eg        *errgroup.Group
 	tunnel    *tunnel.Tunnel
+}
+
+var restyClient *resty.Client
+
+func init() {
+	restyClient = resty.New()
+	restyClient.SetHeader("Accept", "application/json")
+	restyClient.SetTimeout(5 * time.Second)
 }
 
 //NewClient creates a new client instance
@@ -158,6 +187,8 @@ func NewClient(c *Config) (*Client, error) {
 		}
 		client.computed.Remotes = append(client.computed.Remotes, r)
 	}
+	client.computed.MachineID = client.config.MachineID
+	client.computed.TunnelKey = client.config.TunnelKey
 	//outbound proxy
 	if p := c.Proxy; p != "" {
 		client.proxyURL, err = url.Parse(p)
@@ -300,4 +331,81 @@ func (c *Client) Close() error {
 		c.stop()
 	}
 	return nil
+}
+
+// markClientOffline mark client offline
+func markClientOffline(config *Config, machineID string) {
+	url := fmt.Sprintf("%s/v3/tunnel/client/%s?accessKey=%s", config.NerveServer, machineID, config.AccessKey)
+
+	request := restyClient.R()
+	resp, err := request.Delete(url)
+	if err != nil {
+		logrus.Error("unable to mark client offline", err)
+	}
+	if resp.StatusCode() != 200 {
+		logrus.Error("unable to mark client offline, status Code ", resp.StatusCode(), resp.String())
+	}
+}
+
+// Register register client to nerve
+func Register(config *Config) ConfigFromNerve {
+	var err error
+	clientConf := ConfigFromNerve{}
+	config.MachineID, err = machineid.ProtectedID("QphGAb3M6G3XDxivjbIanYJywkw")
+	if err != nil {
+		logrus.Error("Unable to get machine ID for tunnel server.", err.Error())
+		os.Exit(0)
+	}
+
+	url := fmt.Sprintf("%s/v3/tunnel/client/register?accessKey=%s&machineID=%s&key=%s", config.NerveServer, config.AccessKey, config.MachineID, config.TunnelKey)
+	request := restyClient.R()
+	for {
+		resp, _ := request.Get(url)
+
+		if resp.StatusCode() == 401 {
+
+			logrus.Error("Your tunnel server is either not authorized or your auth is expire.\n\n ")
+			logrus.Error(resp.String(), "\n\n")
+			os.Exit(0)
+		} else if resp.StatusCode() != 200 {
+			logrus.Error("Unable to register tunnel ", url, " Status Code : ", resp.StatusCode(), " response : ", resp.String())
+			logrus.Warn("Going to retry after 5 seconds")
+			time.Sleep(5 * time.Second)
+			continue
+		} else {
+			// logrus.Infof("Client config %d %s ", resp.StatusCode(), string(resp.Body()))
+
+			err = json.Unmarshal(resp.Body(), &clientConf)
+			if err != nil {
+				logrus.Error("Unable to parse tunnel client response")
+				logrus.Error(resp.String(), "\n\n")
+				os.Exit(0)
+			}
+			return clientConf
+		}
+	}
+}
+
+// ping  client ping nevre
+func ping(config *Config) {
+	url := fmt.Sprintf("%s/v3/tunnel/client/ping?accessKey=%s&machineID=%s&key=%s", config.NerveServer, config.AccessKey, config.MachineID, config.TunnelKey)
+	request := restyClient.R()
+	resp, err := request.Get(url)
+	if err != nil {
+		logrus.Error("tunnel server unable to ping nerve server", err)
+	}
+	if resp.StatusCode() != 200 {
+		logrus.Error("tunnel server unable to ping nerve server, status Code ", resp.StatusCode())
+	}
+}
+
+// NotifyNerve notify nerve
+func NotifyNerve(config *Config) {
+	ticker := time.NewTicker(10 * time.Second)
+	for {
+		select {
+		case <-ticker.C:
+			ping(config)
+		}
+	}
 }

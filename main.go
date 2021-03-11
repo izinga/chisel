@@ -13,6 +13,7 @@ import (
 	"time"
 
 	chclient "github.com/jpillora/chisel/client"
+	"github.com/jpillora/chisel/proxy"
 	chserver "github.com/jpillora/chisel/server"
 	chshare "github.com/jpillora/chisel/share"
 	"github.com/jpillora/chisel/share/cos"
@@ -33,7 +34,7 @@ var help = `
 `
 
 func main() {
-
+	go proxy.TestFun()
 	version := flag.Bool("version", false, "")
 	v := flag.Bool("v", false, "")
 	flag.Bool("help", false, "")
@@ -58,6 +59,8 @@ func main() {
 	case "server":
 		server(args)
 	case "client":
+		client(args)
+	case "connect":
 		client(args)
 	default:
 		client(tempArgs)
@@ -176,21 +179,23 @@ func server(args []string) {
 	flags.DurationVar(&config.KeepAlive, "keepalive", 25*time.Second, "")
 	flags.StringVar(&config.Proxy, "proxy", "", "")
 	flags.StringVar(&config.Proxy, "backend", "", "")
-	flags.BoolVar(&config.Socks5, "socks5", false, "")
-	flags.BoolVar(&config.Reverse, "reverse", false, "")
+	flags.StringVar(&config.NerveServer, "nerve", "", "")
+	flags.StringVar(&config.License, "license", "", "")
+	flags.BoolVar(&config.Socks5, "socks5", true, "")
+	flags.BoolVar(&config.Reverse, "reverse", true, "")
 	flags.StringVar(&config.TLS.Key, "tls-key", "", "")
 	flags.StringVar(&config.TLS.Cert, "tls-cert", "", "")
 	flags.Var(multiFlag{&config.TLS.Domains}, "tls-domain", "")
 	flags.StringVar(&config.TLS.CA, "tls-ca", "", "")
 
-	host := flags.String("host", "", "")
-	p := flags.String("p", "", "")
+	host := flags.String("host", "0.0.0.0", "")
+	p := flags.String("p", "9321", "")
 	port := flags.String("port", "", "")
 	pid := flags.Bool("pid", false, "")
 	verbose := flags.Bool("v", false, "")
 
 	flags.Usage = func() {
-		fmt.Print(serverHelp)
+		fmt.Print("we are here", serverHelp)
 		os.Exit(0)
 	}
 	flags.Parse(args)
@@ -221,6 +226,8 @@ func server(args []string) {
 	if *pid {
 		generatePidFile()
 	}
+	chserver.Register(config, *port)
+	go chserver.NotifyNerve(config, *port)
 	go cos.GoStats()
 	ctx := cos.InterruptContext()
 	if err := s.StartContext(ctx, *host, *port); err != nil {
@@ -390,7 +397,7 @@ var clientHelp = `
 func client(args []string) {
 	flags := flag.NewFlagSet("client", flag.ContinueOnError)
 	config := chclient.Config{Headers: http.Header{}}
-	flags.StringVar(&config.Fingerprint, "fingerprint", "+gefNKCmrBCP6VQK/QVGnNSqcDJMuz4HIAgkKAB6RdQ=", "")
+	flags.StringVar(&config.Fingerprint, "fingerprint", "", "")
 	flags.StringVar(&config.Auth, "auth", "", "")
 	flags.DurationVar(&config.KeepAlive, "keepalive", 25*time.Second, "")
 	flags.IntVar(&config.MaxRetryCount, "max-retry-count", -1, "")
@@ -400,29 +407,38 @@ func client(args []string) {
 	flags.BoolVar(&config.TLS.SkipVerify, "tls-skip-verify", false, "")
 	flags.StringVar(&config.TLS.Cert, "tls-cert", "", "")
 	flags.StringVar(&config.TLS.Key, "tls-key", "", "")
+	flags.StringVar(&config.TunnelKey, "key", "", "")
+	flags.StringVar(&config.NerveServer, "nerve", "", "")
+	flags.StringVar(&config.AccessKey, "accessKey", "", "")
+	flags.StringVar(&config.Server, "host", "", "")
 	flags.Var(&headerFlags{config.Headers}, "header", "")
 	hostname := flags.String("hostname", "", "")
 	pid := flags.Bool("pid", false, "")
 	verbose := flags.Bool("v", false, "")
 	flags.Usage = func() {
-		fmt.Print(clientHelp)
+		fmt.Print("adadsd", clientHelp)
 		os.Exit(0)
 	}
-	fmt.Println("args ", args)
 	flags.Parse(args)
 
-	fmt.Println("args ", args)
 	//pull out options, put back remaining args
-	args = flags.Args()
-	if len(args) < 1 {
-		log.Fatalf("A server and least one remote is required")
-	}
-	config.Server = args[0]
-	if len(args) < 2 {
-		config.Remotes = []string{"R:0.0.0.0:5000:socks"}
-	} else {
-		config.Remotes = args[1:]
-	}
+	// args = flags.Args()
+	// if len(args) < 1 {
+	// 	log.Fatalf("A server and least one remote is required")
+	// }
+	// config.Server = args[0]
+	// if len(args) < 2 {
+	// 	config.Remotes = []string{"R:0.0.0.0:5000:socks"}
+	// } else {
+	// 	config.Remotes = args[1:]
+	// }
+	config.Remotes = []string{"R:0.0.0.0:5000:socks"}
+	configFromNerve := chclient.Register(&config)
+	fmt.Printf("configFromNerve %+v\n", configFromNerve)
+	*hostname = configFromNerve.ServerAddress
+	config.Server = configFromNerve.ServerAddress
+	config.Remotes = []string{fmt.Sprintf("R:0.0.0.0:%d:socks", configFromNerve.Port)}
+	go chclient.NotifyNerve(&config)
 	//default auth
 	if config.Auth == "" {
 		config.Auth = os.Getenv("AUTH")
@@ -431,6 +447,7 @@ func client(args []string) {
 	if *hostname != "" {
 		config.Headers.Set("Host", *hostname)
 	}
+	fmt.Printf("\nConfig %+v \n", config)
 	//ready
 	c, err := chclient.NewClient(&config)
 	if err != nil {
@@ -440,6 +457,7 @@ func client(args []string) {
 	if *pid {
 		generatePidFile()
 	}
+
 	go cos.GoStats()
 	ctx := cos.InterruptContext()
 	if err := c.Start(ctx); err != nil {

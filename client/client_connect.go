@@ -62,6 +62,7 @@ func (c *Client) connectionLoop(ctx context.Context) error {
 		}
 	}
 	c.Close()
+	markClientOffline(c.config, c.config.MachineID)
 	return nil
 }
 
