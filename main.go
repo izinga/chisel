@@ -189,7 +189,7 @@ func server(args []string) {
 	flags.StringVar(&config.TLS.CA, "tls-ca", "", "")
 
 	host := flags.String("host", "0.0.0.0", "")
-	p := flags.String("p", "9321", "")
+	p := flags.String("p", "1080", "")
 	port := flags.String("port", "", "")
 	pid := flags.Bool("pid", false, "")
 	verbose := flags.Bool("v", false, "")

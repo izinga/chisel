@@ -128,6 +128,12 @@ func (s *Server) handleWebsocket(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	fmt.Printf("r.Payload %+v\n", c)
+	// check for existing key
+	if _, ok := proxy.TunnelClientMap.Load(c.TunnelKey); ok {
+		fmt.Println("there is already a tunnel is connected with same key ", c.TunnelKey)
+		failed(s.Errorf("there is already a tunnel is connected with same key "))
+		return
+	}
 	if c.Version != chshare.BuildVersion {
 		v := c.Version
 		if v == "" {

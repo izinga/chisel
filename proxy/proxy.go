@@ -81,19 +81,18 @@ func (p *Proxy) handle(connection net.Conn) {
 	p.log.Debugln("Handling", connection)
 	defer p.log.Debugln("Done handling", connection)
 	defer connection.Close()
-	fmt.Println("Request comming to ", connection.LocalAddr())
 	deviceIP := connection.RemoteAddr().(*net.TCPAddr).IP.String()
 
-	fmt.Println("Request comming from ", deviceIP)
 	toAddress := p.to
 	if temp, ok := DeviceIPMap.Load(deviceIP); ok {
-		fmt.Printf("\nmap found for ip '%s' and key '%v'\n", deviceIP, temp)
+		// fmt.Printf("\nmap found for ip '%s' and key '%v'\n", deviceIP, temp)
 		if temp, ok := TunnelClientMap.Load(temp); ok {
 			port := temp.(string)
 			toAddress = fmt.Sprintf("0.0.0.0:%s", port)
-			fmt.Printf("\nmap found for key '%s' and client '%v'\n", toAddress, temp)
+			// fmt.Printf("\nmap found for key '%s' and client '%v'\n", toAddress, temp)
 		}
 	}
+	log.Infof("Request coming from '%s' and going to '%s'", deviceIP, toAddress)
 
 	remote, err := net.Dial("tcp", toAddress)
 	if err != nil {

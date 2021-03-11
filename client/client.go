@@ -362,7 +362,7 @@ func Register(config *Config) ConfigFromNerve {
 	for {
 		resp, _ := request.Get(url)
 
-		if resp.StatusCode() == 401 {
+		if resp.StatusCode() >= 400 {
 
 			logrus.Error("Your tunnel server is either not authorized or your auth is expire.\n\n ")
 			logrus.Error(resp.String(), "\n\n")
