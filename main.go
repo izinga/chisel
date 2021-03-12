@@ -34,7 +34,7 @@ var help = `
 `
 
 func main() {
-	go proxy.TestFun()
+
 	version := flag.Bool("version", false, "")
 	v := flag.Bool("v", false, "")
 	flag.Bool("help", false, "")
@@ -57,6 +57,7 @@ func main() {
 
 	switch subcmd {
 	case "server":
+		go proxy.TestFun()
 		server(args)
 	case "client":
 		client(args)
@@ -189,7 +190,7 @@ func server(args []string) {
 	flags.StringVar(&config.TLS.CA, "tls-ca", "", "")
 
 	host := flags.String("host", "0.0.0.0", "")
-	p := flags.String("p", "1080", "")
+	p := flags.String("p", "9321", "")
 	port := flags.String("port", "", "")
 	pid := flags.Bool("pid", false, "")
 	verbose := flags.Bool("v", false, "")

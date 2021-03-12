@@ -122,6 +122,6 @@ func (p *Proxy) copy(from, to net.Conn, wg *sync.WaitGroup) {
 }
 
 func TestFun() {
-	proxy := NewProxy("0.0.0.0:5000", "0.0.0.0:3000")
+	proxy := NewProxy("0.0.0.0:1080", "0.0.0.0:3000")
 	proxy.Start()
 }
