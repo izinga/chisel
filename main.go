@@ -180,7 +180,7 @@ func server(args []string) {
 	flags.DurationVar(&config.KeepAlive, "keepalive", 25*time.Second, "")
 	flags.StringVar(&config.Proxy, "proxy", "", "")
 	flags.StringVar(&config.Proxy, "backend", "", "")
-	flags.StringVar(&config.NerveServer, "nerve", "", "")
+	flags.StringVar(&config.NerveServer, "deviceLabURL", "", "")
 	flags.StringVar(&config.License, "licenseKey", "", "")
 	flags.BoolVar(&config.Socks5, "socks5", true, "")
 	flags.BoolVar(&config.Reverse, "reverse", true, "")
