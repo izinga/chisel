@@ -409,7 +409,7 @@ func client(args []string) {
 	flags.StringVar(&config.TLS.Cert, "tls-cert", "", "")
 	flags.StringVar(&config.TLS.Key, "tls-key", "", "")
 	flags.StringVar(&config.TunnelKey, "tunnelKey", "", "")
-	flags.StringVar(&config.NerveServer, "nerve", "", "")
+	flags.StringVar(&config.NerveServer, "deviceLabURL", "", "")
 	flags.StringVar(&config.AccessKey, "accessKey", "", "")
 	flags.StringVar(&config.Server, "host", "", "")
 	flags.Var(&headerFlags{config.Headers}, "header", "")
