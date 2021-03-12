@@ -408,7 +408,7 @@ func client(args []string) {
 	flags.BoolVar(&config.TLS.SkipVerify, "tls-skip-verify", false, "")
 	flags.StringVar(&config.TLS.Cert, "tls-cert", "", "")
 	flags.StringVar(&config.TLS.Key, "tls-key", "", "")
-	flags.StringVar(&config.TunnelKey, "key", "", "")
+	flags.StringVar(&config.TunnelKey, "tunnelKey", "", "")
 	flags.StringVar(&config.NerveServer, "nerve", "", "")
 	flags.StringVar(&config.AccessKey, "accessKey", "", "")
 	flags.StringVar(&config.Server, "host", "", "")
