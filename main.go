@@ -181,7 +181,7 @@ func server(args []string) {
 	flags.StringVar(&config.Proxy, "proxy", "", "")
 	flags.StringVar(&config.Proxy, "backend", "", "")
 	flags.StringVar(&config.NerveServer, "nerve", "", "")
-	flags.StringVar(&config.License, "license", "", "")
+	flags.StringVar(&config.License, "licenseKey", "", "")
 	flags.BoolVar(&config.Socks5, "socks5", true, "")
 	flags.BoolVar(&config.Reverse, "reverse", true, "")
 	flags.StringVar(&config.TLS.Key, "tls-key", "", "")
